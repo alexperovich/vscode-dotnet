@@ -1,7 +1,7 @@
-﻿using System.IO;
-using System.Linq;
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace VSCode.JsonRpc
 {
@@ -11,52 +11,50 @@ namespace VSCode.JsonRpc
         private const string _HeaderContentLength = "Content-Length";
 
         internal StreamMessageReader(Stream stream)
+            : this(stream, Encoding.UTF8)
         {
-            Encoding = Encoding.UTF8;
-            BaseStream = stream;
         }
 
         internal StreamMessageReader(Stream stream, Encoding encoding)
-            : this(stream)
         {
-            Encoding = encoding;
+            Enumerator = ReadMessages(stream, encoding);
         }
 
-        internal Stream BaseStream { get; private set; }
-        internal Encoding Encoding { get; private set; }
+        internal IEnumerator<IMessage> Enumerator { get; }
 
-        public async Task<IMessage> ReadAsync()
+        public void Dispose()
         {
-            IMessage message = null;
-            MessageBuffer buffer = new MessageBuffer(Encoding);
+            Enumerator?.Dispose();
+        }
 
-            while (message == null)
+        private static IEnumerator<IMessage> ReadMessages(Stream stream, Encoding encoding)
+        {
+            var messageBuffer = new MessageBuffer();
+            var charBuffer = new char[_BufferSize];
+            var reader = new StreamReader(stream, encoding);
+            while (true)
             {
-                byte[] chunk = new byte[_BufferSize];
-                int result = await BaseStream.ReadAsync(chunk, 0, _BufferSize);             
-
-                if (result > 0)
+                int read = reader.Read(charBuffer, 0, charBuffer.Length);
+                if (read == 0)
                 {
-                    buffer.Append(chunk.Take(result).ToArray());
+                    yield break;
                 }
-
-                else
+                messageBuffer.Append(new string(charBuffer, 0, read));
+                IMessage message;
+                while (messageBuffer.TryReadMessage(out message))
                 {
-                    break;
+                    yield return message;
                 }
-
-                if (!buffer.Valid)
-                {
-                    continue;
-                }
-
-                string content = buffer.TryReadContent();
-
-                message = MessageSerializer.Deserialize(content);
-                buffer = new MessageBuffer(Encoding);
             }
+        }
 
-            return message;
+        public IMessage Read()
+        {
+            if (!Enumerator.MoveNext())
+            {
+                throw new InvalidOperationException();
+            }
+            return Enumerator.Current;
         }
     }
 }

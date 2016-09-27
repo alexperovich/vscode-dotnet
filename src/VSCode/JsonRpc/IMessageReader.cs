@@ -1,9 +1,10 @@
-﻿using System.Threading.Tasks;
+﻿using System;
+using System.Threading.Tasks;
 
 namespace VSCode.JsonRpc
 {
-    internal interface IMessageReader
+    internal interface IMessageReader : IDisposable
     {
-        Task<IMessage> ReadAsync();
+        IMessage Read();
     }
 }

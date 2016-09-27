@@ -11,5 +11,6 @@
         }
 
         public TextDocumentSyncKind TextDocumentSync { get; set; }
+        public CompletionOptions CompletionProvider { get; set; }
     }
 }

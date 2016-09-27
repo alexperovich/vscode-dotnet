@@ -120,6 +120,10 @@ namespace VSCode.Editor
 
             ResponseMessage response = await _server.SendRequestAsync(EditorMethods.ShowMessageRequest, parameters);
 
+            if (response.Result == null)
+            {
+                return null;
+            }
             return response.Result.ToObject<MessageActionItem>();
         }
 

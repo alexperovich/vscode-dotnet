@@ -12,57 +12,65 @@ namespace VSCode.JsonRpc
         private const string _HeaderDelimiter = "\r\n";
         private const char _HeaderKeyValueSeperator = ':';
 
-        private List<byte> _buffer;
-
-        internal MessageBuffer()
+        public MessageBuffer()
         {
-            _buffer = new List<byte>();
-
-            Encoding = Encoding.UTF8;
+            TextBuffer = new StringBuilder();
         }
 
-        internal MessageBuffer(Encoding encoding)
-            : this()
-        {
-            Encoding = encoding;
-        }
+        private StringBuilder TextBuffer { get; }
 
-        internal Encoding Encoding { get; private set; }
+        private string Text => TextBuffer.ToString();
 
-        internal string RawMessage
+        public bool TryReadMessage(out IMessage message)
         {
-            get
+            IDictionary<string, string> headers;
+            int contentStartIndex;
+            if (TryReadHeaders(out contentStartIndex, out headers))
             {
-                return Encoding.GetString(_buffer.ToArray());
-            }
-        }
-
-        internal bool Valid
-        {
-            get
-            {
-                int length = -1;
-                int.TryParse(TryReadHeaders()?["Content-Length"], out length);
-
-                string content = TryReadContent();
-
-                if (!string.IsNullOrWhiteSpace(content))
+                int length = int.Parse(headers["Content-Length"]);
+                string content;
+                if (TryReadContent(contentStartIndex, length, out content))
                 {
-                    return (length == content.Length);
+                    TextBuffer.Remove(0, contentStartIndex + length);
+                    message = MessageSerializer.Deserialize(content);
+                    return true;
                 }
+            }
+            message = null;
+            return false;
+        }
 
+        private bool TryReadHeaders(out int contentStartIndex, out IDictionary<string, string> headers)
+        {
+            Dictionary<string, string> _headers = new Dictionary<string, string>();
+            headers = null;
+            contentStartIndex = -1;
+
+            var headerEndIndex = Text.IndexOf(_HeaderContentSeperator);
+            if (headerEndIndex == -1)
+            {
                 return false;
             }
+
+            string[] headerLines = Text.Substring(0, headerEndIndex).Split(new[] { _HeaderDelimiter }, StringSplitOptions.RemoveEmptyEntries);
+            headers = headerLines.Select(l =>
+            {
+                var index = l.IndexOf(_HeaderKeyValueSeperator);
+                return new KeyValuePair<string, string>(l.Substring(0, index).Trim(), l.Substring(index + 1));
+            }).ToDictionary(p => p.Key, p => p.Value);
+            contentStartIndex = headerEndIndex + _HeaderContentSeperator.Length;
+            return true;
         }
 
-        internal void Append(byte[] chunk)
+        private bool TryReadContent(int startIndex, int length, out string content)
         {
-            if (chunk == null)
+            if (Text.Length >= startIndex + length)
             {
-                return;
+                content = Text.Substring(startIndex, length);
+                return true;
             }
-
-            _buffer.AddRange(chunk);
+            content = null;
+            return false;
         }
 
         internal void Append(string chunk)
@@ -71,68 +79,7 @@ namespace VSCode.JsonRpc
             {
                 return;
             }
-
-            Append(Encoding.GetBytes(chunk));
-        }
-
-        internal string TryReadContent(int length)
-        {
-            if (length < 1)
-            {
-                throw new ArgumentException("Length must be greater than 0.", "length");
-            }
-
-            string raw = _GetBufferAsString();
-            string[] parts = raw.Split(new string[] { _HeaderContentSeperator }, StringSplitOptions.RemoveEmptyEntries);
-
-            if (parts.Length < 2)
-            {
-                return null;
-            }
-
-            string content = string.Join(string.Empty, parts.Skip(1));
-            int safeLength = (length > content.Length) ? content.Length : length;
-
-            return content.Substring(0, safeLength); ;
-        }
-
-        internal string TryReadContent()
-        {
-            return TryReadContent(int.MaxValue);
-        }
-
-        internal Dictionary<string, string> TryReadHeaders()
-        {
-            Dictionary<string, string> results = new Dictionary<string, string>();
-
-            string raw = _GetBufferAsString();
-            string[] parts = raw.Split(new string[] { _HeaderContentSeperator }, StringSplitOptions.RemoveEmptyEntries);
-
-            if (parts.Length < 1)
-            {
-                return null;
-            }
-
-            string[] headers = parts[0].Split(new string[] { _HeaderDelimiter }, StringSplitOptions.RemoveEmptyEntries);
-
-            foreach (string header in headers)
-            {
-                string[] pair = header.Split(_HeaderKeyValueSeperator);
-
-                if (pair.Length < 2)
-                {
-                    continue;
-                }
-
-                results.Add(pair[0], pair[1].Trim());
-            }
-
-            return results;
-        }
-
-        private string _GetBufferAsString()
-        {
-            return Encoding.GetString(_buffer.ToArray());
+            TextBuffer.Append(chunk);
         }
     }
 }

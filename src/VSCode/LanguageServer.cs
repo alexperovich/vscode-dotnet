@@ -233,8 +233,8 @@ namespace VSCode
             ResponseMessage response = new ResponseMessage
             {
                 Id = id,
-                Error = error.ToJObject(),
-                Result = result.ToJObject()
+                Error = error.ToJToken(),
+                Result = result.ToJToken()
             };
 
             Debug("Send Response", response);
@@ -401,12 +401,7 @@ namespace VSCode
 
             while (!_tokenSource.Token.IsCancellationRequested)
             {
-                Task<IMessage> task = null;
-
-                task = _messageReader.ReadAsync();
-                task.Wait(_tokenSource.Token);
-
-                IMessage message = task.Result;
+                IMessage message = _messageReader.Read();
 
                 if (message != null)
                 {

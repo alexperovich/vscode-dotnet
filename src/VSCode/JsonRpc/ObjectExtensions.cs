@@ -19,8 +19,17 @@ namespace VSCode.JsonRpc
                 return null;
             }
 
-            string json = JsonSerializer.Serialize(obj);
-            return JsonSerializer.Deserialize<JObject>(json);
+            return JObject.FromObject(obj);
+        }
+
+        public static JToken ToJToken(this object obj)
+        {
+            if (obj == null)
+            {
+                return null;
+            }
+
+            return JToken.FromObject(obj);
         }
     }
 }
